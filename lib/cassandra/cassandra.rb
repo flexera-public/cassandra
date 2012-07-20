@@ -769,6 +769,7 @@ class Cassandra
         if (ex.type == Thrift::TransportException::NOT_OPEN || ex.type == Thrift::TransportException::TIMED_OUT)\
                              && (options.has_key?(:retry_timeout)) && (timeout_retries < options[:retry_timeout])
           timeout_retries += 1
+          sleep 1
           retry
         else
           timeout_retries = 0

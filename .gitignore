@@ -3,5 +3,6 @@ pkg
 .redcar
 doc/
 .yardoc/
+.rvmrc
 Gemfile.lock
 cassandra-*.gem

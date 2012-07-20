@@ -753,14 +753,29 @@ class Cassandra
     result        = (!block_given? && {}) || nil
     num_results   = 0
 
+    timeout_retries       = 0
+
     options[:start_key] ||= ''
     last_key  = nil
 
     while count.nil? || count > num_results
-      res = get_range_single(column_family, options.merge!(:start_key => last_key || options[:start_key],
-                                                           :key_count => batch_size,
-                                                           :return_empty_rows => true
-                                                          ))
+
+      begin
+        res = get_range_single(column_family, options.merge!(:start_key => last_key || options[:start_key],
+                                                             :key_count => batch_size,
+                                                             :return_empty_rows => true
+                                                            ))
+      rescue Thrift::TransportException => ex
+        if (ex.type == Thrift::TransportException::NOT_OPEN || ex.type == Thrift::TransportException::TIMED_OUT)\
+                             && (options.has_key?(:retry_timeout)) && (timeout_retries < options[:retry_timeout])
+          timeout_retries += 1
+          retry
+        else
+          timeout_retries = 0
+          raise ex
+        end
+      end
+
       break if res.keys.last == last_key
 
       res.each do |key, columns|

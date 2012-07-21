@@ -696,6 +696,8 @@ class Cassandra
   #   * :finish       - The final value for selecting a range of columns.
   #   * :reversed     - If set to true the results will be returned in reverse order.
   #   * :consistency  - Uses the default read consistency if none specified.
+  #   * :retry_timeout - Specify timeout tries inside get_range_batch.
+  #   * :return_empty_rows - Should the get_range_batch returns rows with empty columns.
   #
   def get_range(column_family, options = {}, &blk)
     if block_given? || options[:key_count] || options[:batch_size]
@@ -720,7 +722,9 @@ class Cassandra
                                                       :finish_key => '',
                                                       :key_count  => 100,
                                                       :columns    => nil,
-                                                      :reversed   => false
+                                                      :reversed   => false,
+                                                      :retry_timeout => 0,
+                                                      :return_empty_rows => true
                                                      )
                                  )
 

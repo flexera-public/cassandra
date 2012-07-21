@@ -64,6 +64,8 @@ class Cassandra
     :thrift_client_class  => ThriftClient
   }
 
+  THRIFT_DEFAULTS[:protocol] = Thrift::BinaryProtocolAccelerated if Thrift.const_defined?(:BinaryProtocolAccelerated)
+
   attr_reader :keyspace, :servers, :schema, :thrift_client_options, :thrift_client_class, :auth_request
 
   def self.DEFAULT_TRANSPORT_WRAPPER
@@ -694,6 +696,8 @@ class Cassandra
   #   * :finish       - The final value for selecting a range of columns.
   #   * :reversed     - If set to true the results will be returned in reverse order.
   #   * :consistency  - Uses the default read consistency if none specified.
+  #   * :retry_timeout - Specify timeout tries inside get_range_batch.
+  #   * :return_empty_rows - Should the get_range_batch returns rows with empty columns.
   #
   def get_range(column_family, options = {}, &blk)
     if block_given? || options[:key_count] || options[:batch_size]
@@ -718,7 +722,9 @@ class Cassandra
                                                       :finish_key => '',
                                                       :key_count  => 100,
                                                       :columns    => nil,
-                                                      :reversed   => false
+                                                      :reversed   => false,
+                                                      :retry_timeout => 0,
+                                                      :return_empty_rows => true
                                                      )
                                  )
 
@@ -741,40 +747,60 @@ class Cassandra
   # range of keys in the column_family you request.
   #
   # If a block is passed in we will yield the row key and columns for
-  # each record returned.
+  # each record returned and return a nil value instead of a Cassandra::OrderedHash.
   #
   # See Cassandra#get_range for more details.
   #
   def get_range_batch(column_family, options = {})
     batch_size    = options.delete(:batch_size) || 100
     count         = options.delete(:key_count)
-    result        = {}
+    result        = (!block_given? && {}) || nil
+    num_results   = 0
+
+    timeout_retries       = 0
 
     options[:start_key] ||= ''
     last_key  = nil
 
-    while options[:start_key] != last_key && (count.nil? || count > result.length)
-      options[:start_key] = last_key
-      res = get_range_single(column_family, options.merge!(:start_key => last_key,
-                                                           :key_count => batch_size,
-                                                           :return_empty_rows => true
-                                                          ))
-      res.each do |key, columns|
-        next if options[:start_key] == key
-        next if result.length == count
+    while count.nil? || count > num_results
 
-        unless columns == {}
+      begin
+        res = get_range_single(column_family, options.merge!(:start_key => last_key || options[:start_key],
+                                                             :key_count => batch_size,
+                                                             :return_empty_rows => true
+                                                            ))
+      rescue Thrift::TransportException => ex
+        if (ex.type == Thrift::TransportException::NOT_OPEN || ex.type == Thrift::TransportException::TIMED_OUT)\
+                             && (options.has_key?(:retry_timeout)) && (timeout_retries < options[:retry_timeout])
+          timeout_retries += 1
+          sleep 1
+          retry
+        else
+          timeout_retries = 0
+          raise ex
+        end
+      end
+
+      break if res.keys.last == last_key
+
+      res.each do |key, columns|
+        next if last_key == key
+        next if num_results == count
+
+        if !columns.empty? || options[:return_empty_rows]
           if block_given?
             yield key, columns
           else
             result[key] = columns
           end
+          num_results += 1
         end
+
         last_key = key
       end
     end
 
-    result if !block_given?
+    result
   end
 
   ##

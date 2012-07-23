@@ -750,6 +750,7 @@ class Cassandra
   def get_range_batch(column_family, options = {})
     batch_size    = options.delete(:batch_size) || 100
     count         = options.delete(:key_count)
+    retry_timeout = options.delete(:retry_timeout)
     result        = {}
 
     options[:start_key] ||= ''
@@ -765,7 +766,7 @@ class Cassandra
                                                           ))
       rescue Thrift::TransportException => e
         if (e.type == Thrift::TransportException::NOT_OPEN || e.type == Thrift::TransportException::TIMED_OUT)\
-                             && (options.has_key?(:retry_timeout)) && (timeout_retries < options[:retry_timeout])
+                             && (retry_timeout) && (timeout_retries < retry_timeout)
           timeout_retries += 1
           retry
         else

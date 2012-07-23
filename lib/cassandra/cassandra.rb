@@ -757,10 +757,23 @@ class Cassandra
 
     while options[:start_key] != last_key && (count.nil? || count > result.length)
       options[:start_key] = last_key
-      res = get_range_single(column_family, options.merge!(:start_key => last_key,
+      
+      begin 
+      	res = get_range_single(column_family, options.merge!(:start_key => last_key,
                                                            :key_count => batch_size,
                                                            :return_empty_rows => true
                                                           ))
+      rescue Thrift::TransportException => e
+        if (e.type == Thrift::TransportException::NOT_OPEN || e.type == Thrift::TransportException::TIMED_OUT)\
+                             && (options.has_key?(:retry_timeout)) && (timeout_retries < options[:retry_timeout])
+          timeout_retries += 1
+          retry
+        else
+          timeout_retries = 0
+          raise e
+        end
+      end
+
       res.each do |key, columns|
         next if options[:start_key] == key
         next if result.length == count

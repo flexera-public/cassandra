@@ -684,16 +684,18 @@ class Cassandra
   #
   # * column_family - The column_family that you are inserting into.
   # * options - Valid options are:
-  #   * :start_key    - The starting value for selecting a range of keys (only useful with OPP).
-  #   * :finish_key   - The final value for selecting a range of keys (only useful with OPP).
-  #   * :key_count    - The total number of keys to return from the query. (see note regarding deleted records)
-  #   * :batch_size   - The maximum number of keys to return per query. If specified will loop until :key_count is obtained or all records have been returned.
-  #   * :columns 	    - A list of columns to return.
-  #   * :count        - The number of columns requested to be returned.
-  #   * :start        - The starting value for selecting a range of columns.
-  #   * :finish       - The final value for selecting a range of columns.
-  #   * :reversed     - If set to true the results will be returned in reverse order.
-  #   * :consistency  - Uses the default read consistency if none specified.
+  #   * :start_key         - The starting value for selecting a range of keys (only useful with OPP).
+  #   * :finish_key        - The final value for selecting a range of keys (only useful with OPP).
+  #   * :key_count         - The total number of keys to return from the query. (see note regarding deleted records)
+  #   * :batch_size        - The maximum number of keys to return per query. If specified will loop until :key_count is obtained or all records have been returned.
+  #   * :columns           - A list of columns to return.
+  #   * :count             - The number of columns requested to be returned.
+  #   * :start             - The starting value for selecting a range of columns.
+  #   * :finish            - The final value for selecting a range of columns.
+  #   * :reversed          - If set to true the results will be returned in reverse order.
+  #   * :consistency       - Uses the default read consistency if none specified.
+  #   * :retry_timeout     - Specify the timeout for retries inside of get_range_batch.
+  #   * :return_empty_rows - Determines whether get_range_batch returns rows with empty columns. 
   #
   def get_range(column_family, options = {}, &blk)
     if block_given? || options[:key_count] || options[:batch_size]
@@ -748,6 +750,7 @@ class Cassandra
   def get_range_batch(column_family, options = {})
     batch_size    = options.delete(:batch_size) || 100
     count         = options.delete(:key_count)
+    retry_timeout = options.delete(:retry_timeout)
     result        = {}
 
     options[:start_key] ||= ''
@@ -755,15 +758,28 @@ class Cassandra
 
     while options[:start_key] != last_key && (count.nil? || count > result.length)
       options[:start_key] = last_key
-      res = get_range_single(column_family, options.merge!(:start_key => last_key,
+      
+      begin 
+      	res = get_range_single(column_family, options.merge!(:start_key => last_key,
                                                            :key_count => batch_size,
                                                            :return_empty_rows => true
                                                           ))
+      rescue Thrift::TransportException => e
+        if (e.type == Thrift::TransportException::NOT_OPEN || e.type == Thrift::TransportException::TIMED_OUT)\
+                             && (retry_timeout) && (timeout_retries < retry_timeout)
+          timeout_retries += 1
+          retry
+        else
+          timeout_retries = 0
+          raise e
+        end
+      end
+
       res.each do |key, columns|
         next if options[:start_key] == key
         next if result.length == count
 
-        unless columns == {}
+        if !columns.empty? || options[:return_empty_rows]
           if block_given?
             yield key, columns
           else

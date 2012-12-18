@@ -764,9 +764,13 @@ class Cassandra
                                                            :key_count => batch_size,
                                                            :return_empty_rows => true
                                                           ))
-      rescue Thrift::TransportException => e
-        if (e.type == Thrift::TransportException::NOT_OPEN || e.type == Thrift::TransportException::TIMED_OUT)\
-                             && (retry_timeout) && (timeout_retries < retry_timeout)
+      rescue Exception => e
+        wrapped_timeout      = e.is_a?(CassandraThrift::TimedOutException)
+        unwrapped_timeout    = e.is_a?(Thrift::TransportException) && (e.type == Thrift::TransportException::TIMED_OUT)
+        unwrapped_disconnect = e.is_a?(Thrift::TransportException) && (e.type == Thrift::TransportException::TIMED_OUT)
+
+        if (wrapped_timeout || unwrapped_timeout || unwrapped_disconnect) &&
+           (timeout_retries < retry_timeout)
           timeout_retries += 1
           retry
         else

@@ -752,9 +752,11 @@ class Cassandra
     count         = options.delete(:key_count)
     retry_timeout = options.delete(:retry_timeout)
     result        = {}
-
+     
     options[:start_key] ||= ''
     last_key  = nil
+
+    timeout_retries = 0
 
     while options[:start_key] != last_key && (count.nil? || count > result.length)
       options[:start_key] = last_key

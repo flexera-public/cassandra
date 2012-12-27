@@ -748,27 +748,31 @@ class Cassandra
   # See Cassandra#get_range for more details.
   #
   def get_range_batch(column_family, options = {})
-    batch_size      = options.delete(:batch_size) || 100
-    count           = options.delete(:key_count)
-    result          = (!block_given? && {}) || nil
-    num_results     = 0
-    retry_timeout   = options.delete(:retry_timeout)
-    timeout_retries = 0
-
+    batch_size    = options.delete(:batch_size) || 100
+    count         = options.delete(:key_count)
+    retry_timeout = options.delete(:retry_timeout)
+    result        = {}
+     
+    options[:start_key] ||= ''
     last_key  = nil
 
-    while count.nil? || count > num_results
-      res = nil
+    timeout_retries = 0
 
-      begin
-        res = get_range_single(column_family, options.merge!(:start_key => last_key || options[:start_key],
-                                                             :key_count => batch_size,
-                                                             :return_empty_rows => true
-                                                            ))
-        break if res.keys.last == last_key
-      rescue Thrift::TransportException => e
-        if (e.type == Thrift::TransportException::NOT_OPEN || e.type == Thrift::TransportException::TIMED_OUT)\
-                             && (retry_timeout) && (timeout_retries < retry_timeout)
+    while options[:start_key] != last_key && (count.nil? || count > result.length)
+      options[:start_key] = last_key
+      
+      begin 
+      	res = get_range_single(column_family, options.merge!(:start_key => last_key,
+                                                           :key_count => batch_size,
+                                                           :return_empty_rows => true
+                                                          ))
+      rescue Exception => e
+        wrapped_timeout      = e.is_a?(CassandraThrift::TimedOutException)
+        unwrapped_timeout    = e.is_a?(Thrift::TransportException) && (e.type == Thrift::TransportException::TIMED_OUT)
+        unwrapped_disconnect = e.is_a?(Thrift::TransportException) && (e.type == Thrift::TransportException::NOT_OPEN)
+
+        if (wrapped_timeout || unwrapped_timeout || unwrapped_disconnect) &&
+           (timeout_retries < retry_timeout)
           timeout_retries += 1
           retry
         else

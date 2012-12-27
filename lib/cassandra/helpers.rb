@@ -1,5 +1,22 @@
 class Cassandra
   module Helpers
+    # TODO Aqua remove this helper and its callers when thrift 0.9.1
+    # is released with bugfixes about BINARY strings
+    def self.convert_to_string_with_encoding(object)
+      case object
+      when SimpleUUID::UUID
+        # Due to a bug in Thrift 0.9.0, we must pretend like
+        # UUID byte-vectors (BINARY encoded Strings) are
+        # UTF-8 encoded, otherwise thrift tries to transcode
+        # to UTF-8 which is not kosher.
+        object.to_s.force_encoding(Encoding::UTF_8)
+      else
+        # All other strings can be passed with natural encoding
+        # (UTF-8, or any encoding that can be transcoded to it).
+        object.to_s
+      end
+    end
+
     def extract_and_validate_params(column_family, keys, args, options)
       options = options.dup
       column_family = column_family.to_s
@@ -34,7 +51,7 @@ class Cassandra
       when Array then el.map { |i| s_map(i, klass) }
       when NilClass then nil
       else
-        klass.new(el).to_s
+        Cassandra::Helpers.convert_to_string_with_encoding(klass.new(el))
       end
     end
   end

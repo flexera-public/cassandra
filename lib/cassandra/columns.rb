@@ -90,8 +90,8 @@ class Cassandra
       CassandraThrift::Mutation.new(
         :column_or_supercolumn => CassandraThrift::ColumnOrSuperColumn.new(
           :column => CassandraThrift::Column.new(
-            :name      => column_name_class(column_family).new(column_name).to_s,
-            :value     => value,
+            :name      => Cassandra::Helpers.convert_to_string_with_encoding(column_name_class(column_family).new(column_name)),
+            :value     => Cassandra::Helpers.convert_to_string_with_encoding(value),
             :timestamp => timestamp,
             :ttl       => ttl
           )

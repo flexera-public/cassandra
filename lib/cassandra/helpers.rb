@@ -10,6 +10,10 @@ class Cassandra
         # UTF-8 encoded, otherwise thrift tries to transcode
         # to UTF-8 which is not kosher.
         object.to_s.force_encoding(Encoding::UTF_8)
+      when Cassandra::Long
+        # Cassandra#Long.to_s returns a string with BINARY encoding;
+        # pretend UTF-8 encoding to work around Thrift bug.
+        object.to_s.force_encoding(Encoding::UTF_8)
       else
         # All other strings can be passed with natural encoding
         # (UTF-8, or any encoding that can be transcoded to it).

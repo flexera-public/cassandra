@@ -9,6 +9,13 @@ class Cassandra
       when self.class # Long
         @bytes = bytes.to_s
       when String
+        # Force binary encoding for input strings; otherwise, their binary data might be interpreted
+        # as UTF-8 escape sequences!
+        unless bytes.encoding == Encoding::BINARY
+          bytes = bytes.dup
+          bytes.force_encoding(Encoding::BINARY)
+        end
+
         case bytes.size
         when 8 # Raw byte array
           @bytes = bytes

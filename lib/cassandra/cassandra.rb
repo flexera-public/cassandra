@@ -782,7 +782,6 @@ class Cassandra
 
       res.each do |key, columns|
         next if last_key == key
-        next if num_results == count
 
         if !columns.empty? || options[:return_empty_rows]
           if block_given?
@@ -790,7 +789,6 @@ class Cassandra
           else
             result[key] = columns
           end
-          num_results += 1
         end
 
         last_key = key

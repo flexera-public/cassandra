@@ -1,11 +1,11 @@
 PATH
   remote: .
   specs:
-    cassandra (0.12.1)
+    cassandra (0.12.2)
       json
       rake
       simple_uuid (>= 0.2.0)
-      thrift_client (>= 0.9.2)
+      thrift_client (~> 0.9.2)
 
 GEM
   remote: http://rubygems.org/
